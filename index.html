@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Barakah Pulse Pro</title>
+    <title>Barakah Pulse Final Fix</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { text-align: center; font-family: sans-serif; background: #f0f2f5; padding: 20px; margin: 0; }
@@ -26,7 +26,7 @@
         <div class="progress-bar"><div id="progress"></div></div>
         <div id="status">Starting camera...</div>
         
-        <button id="flash-btn">🔦 Toggle Flash</button>
+        <button id="flash-btn">🔦 Toggle Flash/Bright</button>
         <video id="v" autoplay playsinline></video>
         <canvas id="c" width="30" height="30" style="display:none;"></canvas>
     </div>
@@ -44,7 +44,7 @@
         let track;
         let isComplete = false;
         let startTime = null;
-        let finalBPM = "--";
+        let currentBPM = 0;
         const MEASURE_TIME = 10; 
 
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 160, height: 120 } })
@@ -58,7 +58,10 @@
         document.getElementById('flash-btn').addEventListener('click', () => {
             if (track) {
                 const s = track.getSettings();
-                track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => alert("Flash not supported"));
+                track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => {
+                    // Flash വർക്ക് ആയില്ലെങ്കിൽ സ്ക്രീൻ ബ്രൈറ്റ്നെസ്സ് കൂട്ടാൻ ഇത് സഹായിക്കും
+                    alert("Flash not supported. Please use more light.");
+                });
             }
         });
 
@@ -73,14 +76,15 @@
                 g += data[i+1];
             }
 
-            if (r > g * 2.0 && r > 80) { // Detection logic optimized
+            // വിരൽ വെച്ചിട്ടുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+            if (r > g * 1.8 && r > 60) { 
                 if (!startTime) startTime = Date.now();
                 let elapsed = (Date.now() - startTime) / 1000;
                 let progressPerc = Math.min((elapsed / MEASURE_TIME) * 100, 100);
                 progressBar.style.width = progressPerc + "%";
 
                 frames.push({ v: r, t: Date.now() });
-                statusDisplay.innerText = "Measuring... " + Math.max(0, Math.round(MEASURE_TIME - elapsed)) + "s";
+                statusDisplay.innerText = "Keep steady... " + Math.max(0, Math.round(MEASURE_TIME - elapsed)) + "s";
 
                 if (elapsed >= MEASURE_TIME) {
                     finishRecording();
@@ -91,10 +95,10 @@
             }
 
             if (frames.length > 80) frames.shift();
-            if (frames.length > 20) {
+            if (frames.length > 15) {
                 calculateBPM();
             }
-            setTimeout(() => requestAnimationFrame(process), 60);
+            setTimeout(() => requestAnimationFrame(process), 65);
         }
 
         function calculateBPM() {
@@ -104,17 +108,18 @@
             }
             let duration = (frames[frames.length-1].t - frames[0].t) / 60000;
             let bpm = Math.round(peaks / duration / 2);
-            if (bpm > 45 && bpm < 155) {
-                finalBPM = bpm;
+            if (bpm > 40 && bpm < 160) {
+                currentBPM = bpm; // വാല്യൂ അപ്ഡേറ്റ് ചെയ്യുന്നു
                 bpmDisplay.innerText = bpm;
             }
         }
 
         function finishRecording() {
             isComplete = true;
-            bpmDisplay.innerText = finalBPM; // കൗണ്ട് ഇവിടെ ലോക്ക് ചെയ്യുന്നു
+            // റീഡിംഗ് കംപ്ലീറ്റ് ആകുമ്പോൾ കൗണ്ട് അവിടെ തന്നെ ഉറപ്പിക്കുന്നു
+            bpmDisplay.innerText = currentBPM > 0 ? currentBPM : "--";
             tickDisplay.style.display = "block";
-            statusDisplay.innerText = "Done!";
+            statusDisplay.innerText = "Reading Finished!";
             statusDisplay.style.color = "#2ed573";
             progressBar.style.width = "100%";
         }
@@ -127,7 +132,6 @@
             tickDisplay.style.display = "none";
             progressBar.style.width = "0%";
             statusDisplay.innerText = "Place finger firmly";
-            statusDisplay.style.color = "#57606f";
         }
     </script>
 </body>
