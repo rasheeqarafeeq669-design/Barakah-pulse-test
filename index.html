@@ -1,12 +1,57 @@
 <!DOCTYPE html>
 <html>
+<head>
+    <title>Barakah Pulse Monitor</title>
+    <style>
+        body { text-align: center; font-family: sans-serif; background: #f4f4f4; padding: 20px; }
+        #status { font-size: 20px; color: #333; margin-bottom: 10px; }
+        #bpm { font-size: 60px; font-weight: bold; color: #e74c3c; }
+        video { width: 1px; height: 1px; opacity: 0; } /* Hide camera view */
+        .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-block; }
+    </style>
+</head>
 <body>
-    <h2>Camera Test</h2>
-    <video id="v" autoplay playsinline style="width:100%; height:auto;"></video>
+    <div class="container">
+        <div id="status">Place your finger on the camera lens</div>
+        <div id="bpm">--</div>
+        <div>BPM</div>
+        <video id="v" autoplay playsinline></video>
+        <canvas id="c" width="100" height="100" style="display:none;"></canvas>
+    </div>
+
     <script>
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then(s => { document.getElementById('v').srcObject = s; })
-        .catch(e => { alert("Camera error: " + e); });
+        const v = document.getElementById('v');
+        const c = document.getElementById('c');
+        const ctx = c.getContext('2d');
+        const bpmDisplay = document.getElementById('bpm');
+        let frames = [];
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+            .then(stream => {
+                v.srcObject = stream;
+                processVideo();
+            });
+
+        function processVideo() {
+            ctx.drawImage(v, 0, 0, 100, 100);
+            const data = ctx.getImageData(0, 0, 100, 100).data;
+            let redSum = 0;
+            for (let i = 0; i < data.length; i += 4) redSum += data[i];
+            
+            frames.push({ val: redSum, time: Date.now() });
+            if (frames.length > 100) frames.shift();
+
+            if (frames.length >= 60) {
+                // Basic pulse detection logic
+                let count = 0;
+                for (let i = 1; i < frames.length - 1; i++) {
+                    if (frames[i].val > frames[i-1].val && frames[i].val > frames[i+1].val) count++;
+                }
+                let bpm = Math.round((count / (frames[frames.length-1].time - frames[0].time)) * 60000);
+                if (bpm > 40 && bpm < 180) bpmDisplay.innerText = bpm;
+            }
+            requestAnimationFrame(processVideo);
+        }
     </script>
 </body>
 </html>
