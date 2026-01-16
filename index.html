@@ -1,28 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Barakah Pulse Pro</title>
+    <title>Barakah Pulse Final</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { text-align: center; font-family: sans-serif; background: #f0f2f5; padding: 20px; margin: 0; }
-        .card { background: white; padding: 25px; border-radius: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 350px; margin-top: 20px; }
-        #bpm { font-size: 70px; font-weight: bold; color: #ff4757; margin: 0; }
-        .label { font-size: 14px; color: #747d8c; text-transform: uppercase; margin-bottom: 5px; }
-        .stress-box { margin-top: 15px; padding: 10px; background: #fff5f5; border-radius: 12px; border: 1px solid #ffe6e6; }
-        #stress-val { font-size: 24px; font-weight: bold; color: #ffa502; }
-        #status { font-size: 14px; color: #57606f; margin: 15px 0; font-weight: 500; }
-        #tick { display: none; font-size: 40px; color: #2ed573; margin: 10px 0; }
+        body { text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 20px; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 360px; margin-top: 10px; }
+        #bpm { font-size: 80px; font-weight: bold; color: #ff4757; margin: 0; line-height: 1; }
+        .label { font-size: 12px; color: #747d8c; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
+        .stress-box { margin-top: 20px; padding: 15px; background: #fffaf0; border-radius: 20px; border: 1px solid #ffeaa7; }
+        #stress-val { font-size: 28px; font-weight: bold; color: #e67e22; }
+        #status { font-size: 15px; color: #2f3542; margin: 20px 0; font-weight: 600; min-height: 22px; }
+        #tick { display: none; font-size: 45px; color: #2ed573; margin: 10px 0; }
         video { width: 1px; height: 1px; opacity: 0; position: absolute; }
-        button { padding: 12px; border-radius: 12px; border: none; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; font-size: 16px; }
-        #repeat-btn { display: none; background: #2ed573; color: white; }
+        button { padding: 15px; border-radius: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; margin-top: 12px; font-size: 16px; transition: 0.3s; }
+        #repeat-btn { display: none; background: #2ed573; color: white; box-shadow: 0 4px 12px rgba(46, 213, 115, 0.3); }
         #flash-btn { background: #2f3542; color: white; }
-        .progress-bar { width: 100%; background: #eee; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 10px; }
-        #progress { width: 0%; height: 100%; background: #ff4757; transition: width 0.3s; }
+        .progress-bar { width: 100%; background: #dfe6e9; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 20px; }
+        #progress { width: 0%; height: 100%; background: linear-gradient(90deg, #ff4757, #ff6b81); transition: width 0.2s; }
+        .heart-beat { animation: beat 1s infinite; display: inline-block; font-size: 45px; }
+        @keyframes beat { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
     <div class="card">
-        <div id="heart" style="font-size: 40px;">❤️</div>
+        <div id="heart" class="heart-beat">❤️</div>
         <div id="bpm">--</div>
         <div class="label">Heart Rate (BPM)</div>
         
@@ -31,7 +33,7 @@
             <div id="stress-val">0%</div>
         </div>
 
-        <div id="tick">✅ Reading Done</div>
+        <div id="tick">✅</div>
         <div class="progress-bar"><div id="progress"></div></div>
         <div id="status">Starting camera...</div>
         
@@ -52,23 +54,28 @@
         const tickDisplay = document.getElementById('tick');
         const progressBar = document.getElementById('progress');
         const repeatBtn = document.getElementById('repeat-btn');
+        const heart = document.getElementById('heart');
         
         let frames = [];
         let track;
         let isComplete = false;
         let startTime = null;
-        let lastBPM = 0;
+        let lockedBPM = "--";
+        let lockedStress = "0%";
+        const MEASURE_TIME = 10; 
 
-        // Camera & Auto Flash
+        // Camera access and Auto Flash
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
             .then(stream => {
                 v.srcObject = stream;
                 track = stream.getVideoTracks()[0];
-                // Try auto flash
+                // Auto Flash
                 setTimeout(() => {
                     track.applyConstraints({ advanced: [{ torch: true }] }).catch(() => {});
                 }, 1000);
                 requestAnimationFrame(process);
+            }).catch(err => {
+                statusDisplay.innerText = "Camera Error: Please allow access.";
             });
 
         function process() {
@@ -79,69 +86,84 @@
             let r = 0, g = 0;
             for (let i = 0; i < data.length; i += 32) { r += data[i]; g += data[i+1]; }
 
-            if (r > g * 2.0 && r > 70) {
+            // Finger Detection
+            if (r > g * 2.0 && r > 60) {
                 if (!startTime) startTime = Date.now();
                 let elapsed = (Date.now() - startTime) / 1000;
-                progressBar.style.width = (elapsed / 10 * 100) + "%";
+                let percent = (elapsed / MEASURE_TIME) * 100;
+                progressBar.style.width = Math.min(percent, 100) + "%";
                 
                 frames.push({ v: r, t: Date.now() });
-                statusDisplay.innerText = "Measuring... " + Math.max(0, Math.round(10 - elapsed)) + "s";
+                statusDisplay.innerText = "Keep steady... " + Math.max(0, Math.round(MEASURE_TIME - elapsed)) + "s";
 
-                if (elapsed >= 10) { finishMeasure(); return; }
+                if (elapsed >= MEASURE_TIME) {
+                    lockResults();
+                    return;
+                }
             } else {
-                if (!isComplete) resetData();
+                if (!isComplete) resetReadings();
             }
 
             if (frames.length > 80) frames.shift();
-            if (frames.length > 20) calculateRealtime();
+            if (frames.length > 20) updateLiveValues();
             
             requestAnimationFrame(process);
         }
 
-        function calculateRealtime() {
+        function updateLiveValues() {
             let peaks = 0;
             for (let i = 1; i < frames.length - 1; i++) {
                 if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
             }
             let duration = (frames[frames.length-1].t - frames[0].t) / 60000;
             let bpm = Math.round(peaks / duration / 2);
-            if (bpm > 45 && bpm < 150) {
-                lastBPM = bpm;
+            
+            if (bpm > 45 && bpm < 155) {
+                lockedBPM = bpm;
                 bpmDisplay.innerText = bpm;
-                let stress = Math.min(Math.max(bpm - 60, 5), 98);
-                stressDisplay.innerText = stress + "%";
+                
+                // Live Stress Calculation
+                let stress = Math.min(Math.max(Math.round((bpm - 60) * 1.3), 4), 98);
+                lockedStress = stress + "%";
+                stressDisplay.innerText = lockedStress;
             }
         }
 
-        function finishMeasure() {
+        function lockResults() {
             isComplete = true;
+            bpmDisplay.innerText = lockedBPM;
+            stressDisplay.innerText = lockedStress;
             tickDisplay.style.display = "block";
             repeatBtn.style.display = "block";
-            statusDisplay.innerText = "Measurement Completed";
+            statusDisplay.innerText = "Measurement Complete!";
+            statusDisplay.style.color = "#2ed573";
             progressBar.style.width = "100%";
+            heart.classList.remove('heart-beat');
         }
 
-        function resetData() {
+        function resetReadings() {
             startTime = null;
             frames = [];
             bpmDisplay.innerText = "--";
             stressDisplay.innerText = "0%";
             progressBar.style.width = "0%";
-            statusDisplay.innerText = "Place finger on camera";
+            statusDisplay.innerText = "Place finger on camera & flash";
+            statusDisplay.style.color = "#2f3542";
         }
 
         repeatBtn.addEventListener('click', () => {
             isComplete = false;
             repeatBtn.style.display = "none";
             tickDisplay.style.display = "none";
-            resetData();
+            heart.classList.add('heart-beat');
+            resetReadings();
             requestAnimationFrame(process);
         });
 
         document.getElementById('flash-btn').addEventListener('click', () => {
             if (track) {
                 const s = track.getSettings();
-                track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => alert("Flash error"));
+                track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => alert("Flash not supported"));
             }
         });
     </script>
