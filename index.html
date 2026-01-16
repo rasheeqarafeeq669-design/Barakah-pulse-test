@@ -1,20 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Barakah Pulse Monitor</title>
+    <title>Barakah Pulse</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { text-align: center; font-family: sans-serif; background: #f4f4f4; padding: 20px; }
-        #status { font-size: 20px; color: #333; margin-bottom: 10px; }
-        #bpm { font-size: 60px; font-weight: bold; color: #e74c3c; }
-        video { width: 1px; height: 1px; opacity: 0; } /* Hide camera view */
-        .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-block; }
+        body { text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 20px; }
+        .card { background: white; padding: 40px 20px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: inline-block; width: 90%; max-width: 350px; }
+        #bpm { font-size: 80px; font-weight: bold; color: #ff4757; margin: 10px 0; }
+        .label { font-size: 18px; color: #747d8c; text-transform: uppercase; letter-spacing: 1px; }
+        #status { font-size: 14px; color: #2f3542; margin-top: 20px; font-style: italic; }
+        video { width: 1px; height: 1px; opacity: 0; position: absolute; }
+        .heart-icon { font-size: 40px; animation: beat 1s infinite; }
+        @keyframes beat { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div id="status">Place your finger on the camera lens</div>
+    <div class="card">
+        <div class="heart-icon">❤️</div>
         <div id="bpm">--</div>
-        <div>BPM</div>
+        <div class="label">BPM</div>
+        <div id="status">Place your finger on the back camera lens and flash</div>
         <video id="v" autoplay playsinline></video>
         <canvas id="c" width="100" height="100" style="display:none;"></canvas>
     </div>
@@ -22,35 +27,43 @@
     <script>
         const v = document.getElementById('v');
         const c = document.getElementById('c');
-        const ctx = c.getContext('2d');
+        const ctx = c.getContext('2d', { willReadFrequently: true });
         const bpmDisplay = document.getElementById('bpm');
+        const statusDisplay = document.getElementById('status');
         let frames = [];
 
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
             .then(stream => {
                 v.srcObject = stream;
-                processVideo();
-            });
+                // Try to turn on flashlight for better accuracy
+                const track = stream.getVideoTracks()[0];
+                track.applyConstraints({ advanced: [{ torch: true }] }).catch(() => {});
+                requestAnimationFrame(process);
+            })
+            .catch(err => { statusDisplay.innerText = "Camera access denied."; });
 
-        function processVideo() {
+        function process() {
             ctx.drawImage(v, 0, 0, 100, 100);
             const data = ctx.getImageData(0, 0, 100, 100).data;
-            let redSum = 0;
-            for (let i = 0; i < data.length; i += 4) redSum += data[i];
+            let r = 0;
+            for (let i = 0; i < data.length; i += 4) r += data[i];
             
-            frames.push({ val: redSum, time: Date.now() });
+            frames.push({ v: r, t: Date.now() });
             if (frames.length > 100) frames.shift();
 
             if (frames.length >= 60) {
-                // Basic pulse detection logic
-                let count = 0;
+                let peaks = 0;
                 for (let i = 1; i < frames.length - 1; i++) {
-                    if (frames[i].val > frames[i-1].val && frames[i].val > frames[i+1].val) count++;
+                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
                 }
-                let bpm = Math.round((count / (frames[frames.length-1].time - frames[0].time)) * 60000);
-                if (bpm > 40 && bpm < 180) bpmDisplay.innerText = bpm;
+                let timeSpan = (frames[frames.length-1].t - frames[0].t) / 60000;
+                let bpm = Math.round(peaks / timeSpan / 2); // Simple pulse logic
+                if (bpm > 45 && bpm < 150) {
+                    bpmDisplay.innerText = bpm;
+                    statusDisplay.innerText = "Measuring...";
+                }
             }
-            requestAnimationFrame(processVideo);
+            requestAnimationFrame(process);
         }
     </script>
 </body>
