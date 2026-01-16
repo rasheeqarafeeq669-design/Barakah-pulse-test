@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Barakah Pulse Fast</title>
+    <title>Barakah Pulse Pro</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { text-align: center; font-family: sans-serif; background: #f0f2f5; padding: 20px; margin: 0; }
@@ -44,19 +44,21 @@
         let track;
         let isComplete = false;
         let startTime = null;
-        const MEASURE_TIME = 10; // Ippo 10 second aayi kurachu
+        let finalBPM = "--";
+        const MEASURE_TIME = 10; 
 
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 160, height: 120 } })
             .then(stream => {
                 v.srcObject = stream;
                 track = stream.getVideoTracks()[0];
+                statusDisplay.innerText = "Place finger firmly";
                 requestAnimationFrame(process);
             });
 
         document.getElementById('flash-btn').addEventListener('click', () => {
             if (track) {
                 const s = track.getSettings();
-                track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => {});
+                track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => alert("Flash not supported"));
             }
         });
 
@@ -71,28 +73,28 @@
                 g += data[i+1];
             }
 
-            // Finger detection
-            if (r > g * 2.2 && r > 100) {
+            if (r > g * 2.0 && r > 80) { // Detection logic optimized
                 if (!startTime) startTime = Date.now();
                 let elapsed = (Date.now() - startTime) / 1000;
                 let progressPerc = Math.min((elapsed / MEASURE_TIME) * 100, 100);
                 progressBar.style.width = progressPerc + "%";
 
                 frames.push({ v: r, t: Date.now() });
-                statusDisplay.innerText = "Hold steady... " + Math.max(0, Math.round(MEASURE_TIME - elapsed)) + "s left";
+                statusDisplay.innerText = "Measuring... " + Math.max(0, Math.round(MEASURE_TIME - elapsed)) + "s";
 
                 if (elapsed >= MEASURE_TIME) {
                     finishRecording();
+                    return;
                 }
             } else {
                 resetAll();
             }
 
             if (frames.length > 80) frames.shift();
-            if (frames.length > 30 && !isComplete) {
+            if (frames.length > 20) {
                 calculateBPM();
             }
-            setTimeout(() => requestAnimationFrame(process), 60); // Processing speed kooti
+            setTimeout(() => requestAnimationFrame(process), 60);
         }
 
         function calculateBPM() {
@@ -102,25 +104,29 @@
             }
             let duration = (frames[frames.length-1].t - frames[0].t) / 60000;
             let bpm = Math.round(peaks / duration / 2);
-            if (bpm > 45 && bpm < 155) bpmDisplay.innerText = bpm;
+            if (bpm > 45 && bpm < 155) {
+                finalBPM = bpm;
+                bpmDisplay.innerText = bpm;
+            }
         }
 
         function finishRecording() {
             isComplete = true;
+            bpmDisplay.innerText = finalBPM; // കൗണ്ട് ഇവിടെ ലോക്ക് ചെയ്യുന്നു
             tickDisplay.style.display = "block";
-            statusDisplay.innerText = "Reading Complete!";
+            statusDisplay.innerText = "Done!";
             statusDisplay.style.color = "#2ed573";
             progressBar.style.width = "100%";
         }
 
         function resetAll() {
+            if (isComplete) return;
             startTime = null;
-            isComplete = false;
             frames = [];
             bpmDisplay.innerText = "--";
             tickDisplay.style.display = "none";
             progressBar.style.width = "0%";
-            statusDisplay.innerText = "Place finger on camera";
+            statusDisplay.innerText = "Place finger firmly";
             statusDisplay.style.color = "#57606f";
         }
     </script>
