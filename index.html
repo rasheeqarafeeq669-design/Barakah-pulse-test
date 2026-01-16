@@ -1,81 +1,39 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Barakah Pulse Fast</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { text-align: center; font-family: sans-serif; background: #f0f2f5; padding: 20px; }
-        .card { background: white; padding: 25px; border-radius: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 350px; }
-        #bpm { font-size: 65px; font-weight: bold; color: #ff4757; margin: 0; }
-        .label { font-size: 14px; color: #747d8c; text-transform: uppercase; }
-        .stress-box { margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 12px; }
-        #stress-val { font-size: 22px; font-weight: bold; color: #ffa502; }
-        video { width: 1px; height: 1px; opacity: 0; position: absolute; }
-        #flash-btn { margin-top: 15px; padding: 12px 20px; border-radius: 10px; border: none; background: #333; color: white; font-weight: bold; width: 100%; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div style="font-size: 35px; animation: beat 1s infinite;">❤️</div>
-        <div id="bpm">--</div>
-        <div class="label">Heart Rate (BPM)</div>
-        <div class="stress-box">
-            <div class="label">Stress Level</div>
-            <div id="stress-val">0%</div>
-        </div>
-        <button id="flash-btn">🔦 Flash On/Off</button>
-        <video id="v" autoplay playsinline></video>
-        <canvas id="c" width="40" height="40" style="display:none;"></canvas>
-    </div>
+function process() {
+    ctx.drawImage(v, 0, 0, 40, 40);
+    const data = ctx.getImageData(0, 0, 40, 40).data;
+    
+    let r = 0, g = 0;
+    for (let i = 0; i < data.length; i += 16) {
+        r += data[i];     // Red channel
+        g += data[i + 1]; // Green channel
+    }
 
-    <script>
-        const v = document.getElementById('v');
-        const c = document.getElementById('c');
-        const ctx = c.getContext('2d', { alpha: false });
-        const bpmDisplay = document.getElementById('bpm');
-        const stressDisplay = document.getElementById('stress-val');
-        let frames = [];
-        let track;
+    // FINGER DETECTION: വിരൽ വെച്ചാൽ റെഡ് ചാനൽ ഗ്രീനിനേക്കാൾ വളരെ കൂടുതലായിരിക്കും
+    if (r > g * 2) { 
+        frames.push({ v: r, t: Date.now() });
+        statusDisplay.innerText = "Measuring... Keep steady.";
+    } else {
+        frames = []; // വിരൽ മാറ്റിയിട്ടുണ്ടെങ്കിൽ പഴയ റീഡിംഗ് കളയുന്നു
+        bpmDisplay.innerText = "--";
+        stressDisplay.innerText = "0%";
+        statusDisplay.innerText = "Place your finger firmly on camera & flash.";
+    }
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 160 } })
-            .then(stream => {
-                v.srcObject = stream;
-                track = stream.getVideoTracks()[0];
-                requestAnimationFrame(process);
-            });
+    if (frames.length > 90) frames.shift();
 
-        document.getElementById('flash-btn').addEventListener('click', () => {
-            if (track) {
-                const settings = track.getSettings();
-                track.applyConstraints({ advanced: [{ torch: !settings.torch }] }).catch(() => alert("Flash not supported"));
-            }
-        });
-
-        function process() {
-            ctx.drawImage(v, 0, 0, 40, 40);
-            const data = ctx.getImageData(0, 0, 40, 40).data;
-            let r = 0;
-            for (let i = 0; i < data.length; i += 16) r += data[i]; 
-            
-            frames.push({ v: r, t: Date.now() });
-            if (frames.length > 90) frames.shift();
-
-            if (frames.length > 60) {
-                let peaks = 0;
-                for (let i = 1; i < frames.length - 1; i++) {
-                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
-                }
-                let duration = (frames[frames.length-1].t - frames[0].t) / 60000;
-                let bpm = Math.round(peaks / duration / 2);
-                
-                if (bpm > 45 && bpm < 155) {
-                    bpmDisplay.innerText = bpm;
-                    let stress = Math.min(Math.max(bpm - 55, 5), 98);
-                    stressDisplay.innerText = stress + "%";
-                }
-            }
-            setTimeout(() => requestAnimationFrame(process), 50); 
+    if (frames.length > 60) {
+        let peaks = 0;
+        for (let i = 1; i < frames.length - 1; i++) {
+            if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
         }
-    </script>
-</body>
-</html>
+        let duration = (frames[frames.length-1].t - frames[0].t) / 60000;
+        let bpm = Math.round(peaks / duration / 2);
+        
+        if (bpm > 45 && bpm < 155) {
+            bpmDisplay.innerText = bpm;
+            let stress = Math.min(Math.max(bpm - 55, 5), 98);
+            stressDisplay.innerText = stress + "%";
+        }
+    }
+    setTimeout(() => requestAnimationFrame(process), 50); 
+}
