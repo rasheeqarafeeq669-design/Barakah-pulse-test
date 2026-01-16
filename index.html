@@ -1,25 +1,33 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Barakah Pulse</title>
+    <title>Barakah Pulse Pro</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 20px; }
-        .card { background: white; padding: 40px 20px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: inline-block; width: 90%; max-width: 350px; }
-        #bpm { font-size: 80px; font-weight: bold; color: #ff4757; margin: 10px 0; }
-        .label { font-size: 18px; color: #747d8c; text-transform: uppercase; letter-spacing: 1px; }
-        #status { font-size: 14px; color: #2f3542; margin-top: 20px; font-style: italic; }
+        body { text-align: center; font-family: 'Segoe UI', sans-serif; background: #eef2f3; padding: 20px; }
+        .card { background: white; padding: 30px 15px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 380px; }
+        #bpm { font-size: 70px; font-weight: bold; color: #ff4757; margin: 5px 0; }
+        .label { font-size: 14px; color: #747d8c; text-transform: uppercase; }
+        .stress-box { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 15px; }
+        #stress-val { font-size: 24px; font-weight: bold; color: #ffa502; }
+        #status { font-size: 13px; color: #57606f; margin-top: 15px; }
         video { width: 1px; height: 1px; opacity: 0; position: absolute; }
-        .heart-icon { font-size: 40px; animation: beat 1s infinite; }
-        @keyframes beat { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        .heart { font-size: 40px; animation: beat 0.8s infinite; color: #ff4757; }
+        @keyframes beat { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
     <div class="card">
-        <div class="heart-icon">❤️</div>
+        <div class="heart">❤️</div>
         <div id="bpm">--</div>
-        <div class="label">BPM</div>
-        <div id="status">Place your finger on the back camera lens and flash</div>
+        <div class="label">Heart Rate (BPM)</div>
+        
+        <div class="stress-box">
+            <div class="label">Estimated Stress</div>
+            <div id="stress-val">0%</div>
+        </div>
+
+        <div id="status">Starting camera and flash...</div>
         <video id="v" autoplay playsinline></video>
         <canvas id="c" width="100" height="100" style="display:none;"></canvas>
     </div>
@@ -29,18 +37,24 @@
         const c = document.getElementById('c');
         const ctx = c.getContext('2d', { willReadFrequently: true });
         const bpmDisplay = document.getElementById('bpm');
+        const stressDisplay = document.getElementById('stress-val');
         const statusDisplay = document.getElementById('status');
         let frames = [];
 
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
             .then(stream => {
                 v.srcObject = stream;
-                // Try to turn on flashlight for better accuracy
                 const track = stream.getVideoTracks()[0];
-                track.applyConstraints({ advanced: [{ torch: true }] }).catch(() => {});
+                
+                // FLASH AUTO ON LOGIC
+                setTimeout(() => {
+                    track.applyConstraints({ advanced: [{ torch: true }] })
+                        .then(() => statusDisplay.innerText = "Flash ON. Cover lens with finger.")
+                        .catch(() => statusDisplay.innerText = "Cover lens and flash with finger.");
+                }, 1000);
+
                 requestAnimationFrame(process);
-            })
-            .catch(err => { statusDisplay.innerText = "Camera access denied."; });
+            });
 
         function process() {
             ctx.drawImage(v, 0, 0, 100, 100);
@@ -49,18 +63,32 @@
             for (let i = 0; i < data.length; i += 4) r += data[i];
             
             frames.push({ v: r, t: Date.now() });
-            if (frames.length > 100) frames.shift();
+            if (frames.length > 120) frames.shift();
 
-            if (frames.length >= 60) {
-                let peaks = 0;
-                for (let i = 1; i < frames.length - 1; i++) {
-                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
+            if (frames.length >= 80) {
+                let peaks = [];
+                for (let i = 2; i < frames.length - 2; i++) {
+                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) {
+                        peaks.push(frames[i].t);
+                    }
                 }
-                let timeSpan = (frames[frames.length-1].t - frames[0].t) / 60000;
-                let bpm = Math.round(peaks / timeSpan / 2); // Simple pulse logic
-                if (bpm > 45 && bpm < 150) {
-                    bpmDisplay.innerText = bpm;
-                    statusDisplay.innerText = "Measuring...";
+                
+                if (peaks.length > 2) {
+                    let duration = (peaks[peaks.length-1] - peaks[0]) / 60000;
+                    let bpm = Math.round((peaks.length - 1) / duration / 2);
+                    
+                    if (bpm > 40 && bpm < 160) {
+                        bpmDisplay.innerText = bpm;
+                        
+                        // STRESS CALCULATION LOGIC (Based on BPM and simple variation)
+                        let stressBase = (bpm > 85) ? (bpm - 60) * 1.5 : (bpm - 50);
+                        let stressPerc = Math.min(Math.max(Math.round(stressBase), 5), 98);
+                        stressDisplay.innerText = stressPerc + "%";
+                        
+                        if(stressPerc > 70) stressDisplay.style.color = "#ff4757";
+                        else if(stressPerc > 40) stressDisplay.style.color = "#ffa502";
+                        else stressDisplay.style.color = "#2ed573";
+                    }
                 }
             }
             requestAnimationFrame(process);
