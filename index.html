@@ -1,97 +1,107 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Barakah Pulse Pro</title>
+    <title>Barakah Pulse Optimized</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { text-align: center; font-family: 'Segoe UI', sans-serif; background: #eef2f3; padding: 20px; }
-        .card { background: white; padding: 30px 15px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 380px; }
-        #bpm { font-size: 70px; font-weight: bold; color: #ff4757; margin: 5px 0; }
-        .label { font-size: 14px; color: #747d8c; text-transform: uppercase; }
-        .stress-box { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 15px; }
+        body { text-align: center; font-family: 'Segoe UI', sans-serif; background: #f4f7f6; padding: 20px; }
+        .card { background: white; padding: 25px; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 350px; }
+        #bpm { font-size: 70px; font-weight: bold; color: #ff4757; margin: 10px 0; }
+        .label { font-size: 14px; color: #747d8c; text-transform: uppercase; font-weight: bold; }
+        .stress-box { margin-top: 15px; padding: 15px; background: #fff5f5; border-radius: 15px; border: 1px solid #ffe6e6; }
         #stress-val { font-size: 24px; font-weight: bold; color: #ffa502; }
-        #status { font-size: 13px; color: #57606f; margin-top: 15px; }
+        #status { font-size: 12px; color: #57606f; margin-top: 15px; }
         video { width: 1px; height: 1px; opacity: 0; position: absolute; }
-        .heart { font-size: 40px; animation: beat 0.8s infinite; color: #ff4757; }
-        @keyframes beat { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        button { margin-top: 15px; padding: 12px 25px; border-radius: 50px; border: none; background: #2f3542; color: white; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.2); width: 100%; }
     </style>
 </head>
 <body>
     <div class="card">
-        <div class="heart">❤️</div>
+        <div style="font-size: 40px; animation: beat 1s infinite;">❤️</div>
         <div id="bpm">--</div>
-        <div class="label">Heart Rate (BPM)</div>
+        <div class="label">BPM</div>
         
         <div class="stress-box">
-            <div class="label">Estimated Stress</div>
+            <div class="label">Stress Level</div>
             <div id="stress-val">0%</div>
         </div>
 
-        <div id="status">Starting camera and flash...</div>
+        <button id="flash-toggle">🔦 Flash On/Off</button>
+        <div id="status">Wait for camera...</div>
+        
         <video id="v" autoplay playsinline></video>
-        <canvas id="c" width="100" height="100" style="display:none;"></canvas>
+        <canvas id="c" width="40" height="40" style="display:none;"></canvas>
     </div>
 
     <script>
         const v = document.getElementById('v');
         const c = document.getElementById('c');
-        const ctx = c.getContext('2d', { willReadFrequently: true });
+        const ctx = c.getContext('2d', { alpha: false });
         const bpmDisplay = document.getElementById('bpm');
         const stressDisplay = document.getElementById('stress-val');
         const statusDisplay = document.getElementById('status');
+        const flashBtn = document.getElementById('flash-toggle');
+        
         let frames = [];
+        let track;
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-            .then(stream => {
-                v.srcObject = stream;
-                const track = stream.getVideoTracks()[0];
-                
-                // FLASH AUTO ON LOGIC
-                setTimeout(() => {
-                    track.applyConstraints({ advanced: [{ torch: true }] })
-                        .then(() => statusDisplay.innerText = "Flash ON. Cover lens with finger.")
-                        .catch(() => statusDisplay.innerText = "Cover lens and flash with finger.");
-                }, 1000);
+        // ലാഗ് കുറയ്ക്കാൻ കുറഞ്ഞ റെസല്യൂഷനിൽ ക്യാമറ ഓപ്പൺ ചെയ്യുന്നു
+        navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment', width: { ideal: 160 }, height: { ideal: 120 } } 
+        })
+        .then(stream => {
+            v.srcObject = stream;
+            track = stream.getVideoTracks()[0];
+            statusDisplay.innerText = "Camera ready. Cover lens & flash.";
+            requestAnimationFrame(processVideo);
+        })
+        .catch(() => statusDisplay.innerText = "Camera error!");
 
-                requestAnimationFrame(process);
-            });
-
-        function process() {
-            ctx.drawImage(v, 0, 0, 100, 100);
-            const data = ctx.getImageData(0, 0, 100, 100).data;
-            let r = 0;
-            for (let i = 0; i < data.length; i += 4) r += data[i];
-            
-            frames.push({ v: r, t: Date.now() });
-            if (frames.length > 120) frames.shift();
-
-            if (frames.length >= 80) {
-                let peaks = [];
-                for (let i = 2; i < frames.length - 2; i++) {
-                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) {
-                        peaks.push(frames[i].t);
-                    }
-                }
-                
-                if (peaks.length > 2) {
-                    let duration = (peaks[peaks.length-1] - peaks[0]) / 60000;
-                    let bpm = Math.round((peaks.length - 1) / duration / 2);
-                    
-                    if (bpm > 40 && bpm < 160) {
-                        bpmDisplay.innerText = bpm;
-                        
-                        // STRESS CALCULATION LOGIC (Based on BPM and simple variation)
-                        let stressBase = (bpm > 85) ? (bpm - 60) * 1.5 : (bpm - 50);
-                        let stressPerc = Math.min(Math.max(Math.round(stressBase), 5), 98);
-                        stressDisplay.innerText = stressPerc + "%";
-                        
-                        if(stressPerc > 70) stressDisplay.style.color = "#ff4757";
-                        else if(stressPerc > 40) stressDisplay.style.color = "#ffa502";
-                        else stressDisplay.style.color = "#2ed573";
-                    }
+        // ഫ്ലാഷ് കൺട്രോൾ ചെയ്യാനുള്ള ഫങ്ക്ഷൻ
+        flashBtn.addEventListener('click', async () => {
+            if (track) {
+                try {
+                    const settings = track.getSettings();
+                    await track.applyConstraints({ advanced: [{ torch: !settings.torch }] });
+                } catch (e) {
+                    alert("Flash not supported on this browser.");
                 }
             }
-            requestAnimationFrame(process);
+        });
+
+        function processVideo() {
+            // ലാഗ് ഒഴിവാക്കാൻ 40x40 പിക്സലിൽ മാത്രം ഡാറ്റ അനലൈസ് ചെയ്യുന്നു
+            ctx.drawImage(v, 0, 0, 40, 40);
+            const data = ctx.getImageData(0, 0, 40, 40).data;
+            
+            let r = 0;
+            // പ്രോസസ്സിംഗ് സ്പീഡ് കൂട്ടാൻ ഓരോ 4-മത്തെ പിക്സൽ മാത്രം നോക്കുന്നു
+            for (let i = 0; i < data.length; i += 16) {
+                r += data[i];
+            }
+            
+            frames.push({ v: r, t: Date.now() });
+            if (frames.length > 90) frames.shift();
+
+            if (frames.length > 60) {
+                let peaks = 0;
+                for (let i = 1; i < frames.length - 1; i++) {
+                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
+                }
+                
+                let timeSpan = (frames[frames.length-1].t - frames[0].t) / 60000;
+                let bpm = Math.round(peaks / timeSpan / 2);
+                
+                if (bpm > 45 && bpm < 160) {
+                    bpmDisplay.innerText = bpm;
+                    // സ്ട്രെസ് കാൽക്കുലേഷൻ
+                    let stress = Math.min(Math.max(bpm - 55, 5), 98);
+                    stressDisplay.innerText = stress + "%";
+                }
+            }
+            
+            // സിപിയു ഓവർലോഡ് ഒഴിവാക്കാൻ 60ms ഗ്യാപ് നൽകുന്നു
+            setTimeout(() => requestAnimationFrame(processVideo), 60);
         }
     </script>
 </body>
