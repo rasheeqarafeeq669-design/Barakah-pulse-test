@@ -5,32 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { text-align: center; font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; margin: 0; }
-        .card { background: white; padding: 30px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 360px; }
-        #bpm { font-size: 80px; font-weight: bold; color: #ff4757; margin: 0; }
-        .stress-box { margin-top: 15px; padding: 15px; background: #fffaf0; border-radius: 20px; border: 1px solid #ffeaa7; }
-        #stress-val { font-size: 30px; font-weight: bold; color: #e67e22; }
-        #status { font-size: 15px; color: #2f3542; margin: 20px 0; font-weight: 600; }
-        video { width: 1px; height: 1px; opacity: 0; position: absolute; }
-        button { padding: 16px; border-radius: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; font-size: 16px; }
-        #repeat-btn { display: none; background: #2ed573; color: white; }
+        .card { background: white; padding: 30px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 360px; margin-top: 20px; }
+        #bpm { font-size: 85px; font-weight: bold; color: #ff4757; margin: 0; line-height: 1; }
+        .label { font-size: 12px; color: #747d8c; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+        .stress-box { margin-top: 20px; padding: 15px; background: #fffaf0; border-radius: 20px; border: 1px solid #ffeaa7; }
+        #stress-val { font-size: 32px; font-weight: bold; color: #e67e22; }
+        #status { font-size: 15px; color: #2f3542; margin: 20px 0; font-weight: 600; min-height: 22px; }
+        .progress-bar { width: 100%; background: #dfe6e9; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 10px; }
+        #progress { width: 0%; height: 100%; background: linear-gradient(90deg, #ff4757, #ff6b81); transition: width 0.2s; }
+        button { padding: 16px; border-radius: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; margin-top: 12px; font-size: 16px; transition: 0.3s; }
+        #repeat-btn { display: none; background: #2ed573; color: white; border: 2px solid #28b463; }
         #flash-btn { background: #2f3542; color: white; }
-        .progress-bar { width: 100%; background: #dfe6e9; height: 12px; border-radius: 6px; overflow: hidden; }
-        #progress { width: 0%; height: 100%; background: #ff4757; }
+        video { width: 1px; height: 1px; opacity: 0; position: absolute; }
     </style>
 </head>
 <body>
     <div class="card">
-        <div style="font-size: 40px;">❤️</div>
+        <div style="font-size: 45px; margin-bottom: 5px;">❤️</div>
         <div id="bpm">--</div>
-        <div style="font-size: 12px; color: #747d8c; text-transform: uppercase;">Heart Rate (BPM)</div>
+        <div class="label">Heart Rate (BPM)</div>
         
         <div class="stress-box">
-            <div style="font-size: 12px; color: #747d8c; text-transform: uppercase;">Stress Level</div>
+            <div class="label">Stress Level</div>
             <div id="stress-val">0%</div>
         </div>
 
-        <div class="progress-bar" style="margin-top:20px;"><div id="progress"></div></div>
-        <div id="status">Place finger on camera</div>
+        <div class="progress-bar"><div id="progress"></div></div>
+        <div id="status">Starting camera...</div>
         
         <button id="repeat-btn">🔄 Measure Again</button>
         <button id="flash-btn">🔦 Flash On/Off</button>
@@ -56,72 +57,98 @@
         let finalBPM = "--";
         let finalStress = "0%";
 
-        async function init() {
+        async function startApp() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                // Flash and Camera permission request
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment', focusMode: 'continuous' } 
+                });
                 v.srcObject = stream;
                 track = stream.getVideoTracks()[0];
-                requestAnimationFrame(process);
-            } catch (e) { statusDisplay.innerText = "Camera error! Open link directly in browser."; }
+                
+                // Auto-torch attempt
+                setTimeout(() => {
+                    track.applyConstraints({ advanced: [{ torch: true }] }).catch(() => {});
+                }, 1000);
+
+                requestAnimationFrame(processFrame);
+            } catch (e) {
+                statusDisplay.innerText = "Error: Please open the direct link in Chrome.";
+            }
         }
 
-        function process() {
+        function processFrame() {
             if (isComplete) return;
+
             ctx.drawImage(v, 0, 0, 30, 30);
             const data = ctx.getImageData(0, 0, 30, 30).data;
             let r = 0, g = 0;
             for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i+1]; }
 
-            if (r > g * 1.5 && r > 500) { 
+            // Detection Logic
+            if (r > g * 2.0 && r > 600) {
                 if (!startTime) startTime = Date.now();
                 let elapsed = (Date.now() - startTime) / 1000;
                 progressBar.style.width = (elapsed * 10) + "%";
-                statusDisplay.innerText = "Measuring... " + Math.max(0, Math.round(10 - elapsed)) + "s";
+                statusDisplay.innerText = "Hold steady... " + Math.max(0, Math.round(10 - elapsed)) + "s";
                 
                 frames.push({ v: r, t: Date.now() });
 
                 if (elapsed >= 10) {
-                    isComplete = true;
-                    bpmDisplay.innerText = finalBPM;
-                    stressDisplay.innerText = finalStress;
-                    repeatBtn.style.display = "block";
-                    statusDisplay.innerText = "✅ Measurement Complete!";
+                    finishMeasurement();
                     return;
                 }
             } else {
-                startTime = null;
-                frames = [];
-                progressBar.style.width = "0%";
-                statusDisplay.innerText = "Place finger firmly on camera";
+                if (!isComplete) {
+                    startTime = null;
+                    frames = [];
+                    progressBar.style.width = "0%";
+                    statusDisplay.innerText = "Place finger on camera & flash";
+                }
             }
 
-            if (frames.length > 20) {
-                let peaks = 0;
-                for (let i = 1; i < frames.length - 1; i++) {
-                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
-                }
-                let bpm = Math.round(peaks / ((frames[frames.length-1].t - frames[0].t) / 60000) / 2);
-                if (bpm > 40 && bpm < 180) {
-                    finalBPM = bpm;
-                    finalStress = Math.min(Math.max(Math.round((bpm - 60) * 1.3), 5), 98) + "%";
-                    bpmDisplay.innerText = finalBPM;
-                    stressDisplay.innerText = finalStress;
-                }
-            }
-            requestAnimationFrame(process);
+            if (frames.length > 15) updateNumbers();
+            requestAnimationFrame(processFrame);
         }
 
-        document.getElementById('flash-btn').onclick = async () => {
+        function updateNumbers() {
+            let peaks = 0;
+            for (let i = 1; i < frames.length - 1; i++) {
+                if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
+            }
+            let duration = (frames[frames.length-1].t - frames[0].t) / 60000;
+            let bpm = Math.round(peaks / duration / 2);
+            
+            if (bpm > 45 && bpm < 160) {
+                finalBPM = bpm;
+                finalStress = Math.min(Math.max(Math.round((bpm - 60) * 1.3), 5), 98) + "%";
+                bpmDisplay.innerText = finalBPM;
+                stressDisplay.innerText = finalStress;
+            }
+        }
+
+        function finishMeasurement() {
+            isComplete = true;
+            bpmDisplay.innerText = finalBPM;
+            stressDisplay.innerText = finalStress;
+            statusDisplay.innerText = "✅ Measurement Complete!";
+            statusDisplay.style.color = "#2ed573";
+            repeatBtn.style.display = "block";
+            progressBar.style.width = "100%";
+        }
+
+        document.getElementById('flash-btn').addEventListener('click', async () => {
             if (track) {
                 const s = track.getSettings();
                 await track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => {
-                    alert("Flash blocked inside JotForm! Please open the link directly in Chrome.");
+                    alert("Flash is blocked in this view. Please use Chrome browser directly.");
                 });
             }
-        };
+        });
 
         repeatBtn.onclick = () => { location.reload(); };
-        init();
+
+        startApp();
     </script>
 </body>
 </html>
