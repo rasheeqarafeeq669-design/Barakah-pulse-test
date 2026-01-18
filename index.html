@@ -1,16 +1,27 @@
-<script>
-    function updateSimultaneous() {
-        let peaks = 0;
-        for (let i = 1; i < frames.length - 1; i++) {
-            if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) peaks++;
-        }
-        let duration = (frames[frames.length-1].t - frames[0].t) / 60000;
-        let bpm = Math.round(peaks / duration / 2);
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barakah Pulse Pro</title>
+    <style>
+        body { text-align: center; font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .card { background: white; padding: 30px; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 350px; }
+        #bpm { font-size: 80px; font-weight: bold; color: #ff4757; margin: 0; }
+        .label { font-size: 14px; color: #747d8c; text-transform: uppercase; letter-spacing: 1px; }
+        .stress-box { margin-top: 20px; padding: 15px; background: #fffaf0; border-radius: 20px; border: 1px solid #ffeaa7; }
+        #stress-val { font-size: 35px; font-weight: bold; color: #e67e22; }
+        #status { font-size: 16px; color: #2f3542; margin: 20px 0; font-weight: 600; min-height: 24px; }
+        .progress-container { width: 100%; background: #dfe6e9; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 20px; }
+        #progress { width: 0%; height: 100%; background: #ff4757; transition: width 0.3s linear; }
+        button { padding: 16px; border-radius: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        #flash-btn { background: #2f3542; color: white; margin-bottom: 10px; }
+        #repeat-btn { background: #2ed573; color: white; display: none; }
+        video { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div style="font-size: 50px; margin-bottom: 10px;">❤️</div>
+        <div id="bpm">--</div>
         
-        if (bpm > 45 && bpm < 160) {
-            // ഒരേ സമയം രണ്ട് ബോക്സുകളിലും വാല്യൂ മാറ്റുന്നു
-            document.getElementById('bpm').innerText = bpm;
-            document.getElementById('stress-val').innerText = Math.round((bpm - 60) * 1.3) + "%";
-        }
-    }
-</script>
