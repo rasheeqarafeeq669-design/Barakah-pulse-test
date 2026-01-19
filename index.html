@@ -1,27 +1,126 @@
-<!DOCTYPE html>
-<html lang="ml">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barakah Pulse Pro</title>
-    <style>
-        body { text-align: center; font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .card { background: white; padding: 30px; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 350px; }
-        #bpm { font-size: 80px; font-weight: bold; color: #ff4757; margin: 0; }
-        .label { font-size: 14px; color: #747d8c; text-transform: uppercase; letter-spacing: 1px; }
-        .stress-box { margin-top: 20px; padding: 15px; background: #fffaf0; border-radius: 20px; border: 1px solid #ffeaa7; }
-        #stress-val { font-size: 35px; font-weight: bold; color: #e67e22; }
-        #status { font-size: 16px; color: #2f3542; margin: 20px 0; font-weight: 600; min-height: 24px; }
-        .progress-container { width: 100%; background: #dfe6e9; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 20px; }
-        #progress { width: 0%; height: 100%; background: #ff4757; transition: width 0.3s linear; }
-        button { padding: 16px; border-radius: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; font-size: 16px; transition: 0.3s; }
-        #flash-btn { background: #2f3542; color: white; margin-bottom: 10px; }
-        #repeat-btn { background: #2ed573; color: white; display: none; }
-        video { position: absolute; width: 1px; height: 1px; opacity: 0; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div style="font-size: 50px; margin-bottom: 10px;">❤️</div>
-        <div id="bpm">--</div>
-        
+================ ANDROID MANIFEST =================
+
+<uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.FLASHLIGHT"/>
+
+<application
+    android:allowBackup="true"
+    android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+</application>
+
+================ MainActivity.kt =================
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+            startCamera(cameraProvider)
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun startCamera(cameraProvider: ProcessCameraProvider) {
+
+        val preview = Preview.Builder().build()
+
+        val imageAnalysis = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+
+        imageAnalysis.setAnalyzer(
+            Executors.newSingleThreadExecutor(),
+            PulseAnalyzer { bpm ->
+                val stress = StressCalculator.calculate(bpm)
+                if (stress) {
+                    NotificationUtil.showStressNotification(this)
+                }
+            }
+        )
+
+        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+        cameraProvider.unbindAll()
+        val camera = cameraProvider.bindToLifecycle(
+            this,
+            cameraSelector,
+            preview,
+            imageAnalysis
+        )
+
+        camera.cameraControl.enableTorch(true)
+    }
+}
+
+================ PulseAnalyzer.kt =================
+
+class PulseAnalyzer(private val onPulseDetected: (Int) -> Unit) :
+    ImageAnalysis.Analyzer {
+
+    private var lastTimestamp = 0L
+    private var beats = 0
+
+    override fun analyze(image: ImageProxy) {
+        val buffer = image.planes[0].buffer
+        val data = ByteArray(buffer.remaining())
+        buffer.get(data)
+
+        val avg = data.map { it.toInt() and 0xFF }.average()
+
+        if (avg < 200) {
+            val now = System.currentTimeMillis()
+            if (lastTimestamp != 0L) {
+                beats++
+                val bpm = (beats * 60000 / (now - lastTimestamp)).toInt()
+                onPulseDetected(bpm)
+            }
+            lastTimestamp = now
+        }
+        image.close()
+    }
+}
+
+================ StressCalculator.kt =================
+
+object StressCalculator {
+
+    fun calculate(bpm: Int): Boolean {
+        return bpm > 100
+    }
+}
+
+================ NotificationUtil.kt =================
+
+object NotificationUtil {
+
+    fun showStressNotification(context: Context) {
+
+        val channelId = "stress_alert"
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "Stress Alert",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            manager.createNotificationChannel(channel)
+        }
+
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("Stress Detected")
+            .setContentText("Please relax & take deep breaths")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        manager.notify(1, notification)
+    }
+}
