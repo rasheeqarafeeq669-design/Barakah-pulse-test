@@ -1,126 +1,120 @@
-================ ANDROID MANIFEST =================
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barakah Pulse Pro</title>
+    <style>
+        body { text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; padding: 20px; margin: 0; }
+        .container { background: white; padding: 30px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 380px; }
+        .header { font-size: 22px; font-weight: bold; color: #2d3436; margin-bottom: 20px; }
+        #bpm { font-size: 90px; font-weight: 800; color: #ff4757; margin: 0; line-height: 1; }
+        .label { font-size: 14px; color: #7f8c8d; letter-spacing: 1px; margin-bottom: 25px; font-weight: bold; }
+        
+        .stress-container { background: #fff9f0; border: 2px solid #ffeaa7; border-radius: 20px; padding: 15px; margin-bottom: 25px; }
+        #stress-val { font-size: 40px; font-weight: bold; color: #e67e22; }
+        .stress-label { font-size: 13px; color: #d35400; font-weight: bold; }
 
-<uses-permission android:name="android.permission.CAMERA"/>
-<uses-permission android:name="android.permission.FLASHLIGHT"/>
+        #status { font-size: 17px; color: #2d3436; margin: 15px 0; min-height: 24px; font-weight: 600; }
+        .progress-bar { width: 100%; background: #dfe6e9; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 25px; }
+        #progress { width: 0%; height: 100%; background: #ff4757; transition: width 0.3s linear; }
+        
+        button { padding: 18px; border-radius: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; font-size: 16px; transition: 0.2s; }
+        #flash-btn { background: #2d3436; color: white; margin-bottom: 12px; }
+        #repeat-btn { background: #27ae60; color: white; display: none; }
+        video { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">BARAKAH PULSE TEST</div>
+        <div style="font-size: 60px; margin-bottom: 5px;">❤️</div>
+        <div id="bpm">--</div>
+        <div class="label">HEART RATE (BPM)</div>
+        
+        <div class="stress-container">
+            <div id="stress-val">0%</div>
+            <div class="stress-label">STRESS LEVEL</div>
+        </div>
 
-<application
-    android:allowBackup="true"
-    android:theme="@style/Theme.Material3.DayNight.NoActionBar">
-</application>
+        <div id="status">Starting Camera...</div>
+        <div class="progress-bar"><div id="progress"></div></div>
+        
+        <button id="flash-btn">🔦 Flash On/Off</button>
+        <button id="repeat-btn" onclick="location.reload()">🔄 Measure Again</button>
 
-================ MainActivity.kt =================
+        <video id="v" autoplay playsinline></video>
+        <canvas id="c" width="30" height="30" style="display:none;"></canvas>
+    </div>
 
-class MainActivity : AppCompatActivity() {
+    <script>
+        const v = document.getElementById('v'), c = document.getElementById('c'), ctx = c.getContext('2d');
+        const bpmDisp = document.getElementById('bpm'), stressDisp = document.getElementById('stress-val');
+        const statusDisp = document.getElementById('status'), progress = document.getElementById('progress'), repeatBtn = document.getElementById('repeat-btn');
+        
+        let frames = [], track, isDone = false, startT = null;
+        let lastBPM = "--", lastStress = "0%";
 
-    private lateinit var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>
+        async function init() {
+            try {
+                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                v.srcObject = s;
+                track = s.getVideoTracks()[0];
+                statusDisp.innerText = "Place finger on camera & flash";
+                requestAnimationFrame(loop);
+            } catch (e) { statusDisp.innerText = "Camera error! Use Chrome."; }
+        }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        function loop() {
+            if (isDone) return;
+            ctx.drawImage(v, 0, 0, 30, 30);
+            const d = ctx.getImageData(0, 0, 30, 30).data;
+            let r = 0, g = 0;
+            for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i+1]; }
 
-        cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+            if (r > g * 2 && r > 500) {
+                if (!startT) startT = Date.now();
+                let dur = (Date.now() - startT) / 1000;
+                progress.style.width = (dur * 10) + "%";
+                statusDisp.innerText = "Measuring... " + Math.ceil(10 - dur) + "s";
+                frames.push({ v: r, t: Date.now() });
 
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-            startCamera(cameraProvider)
-        }, ContextCompat.getMainExecutor(this))
-    }
+                if (dur >= 10) {
+                    isDone = true;
+                    bpmDisp.innerText = lastBPM;
+                    stressDisp.innerText = lastStress;
+                    statusDisp.innerText = "✅ Result Locked!";
+                    repeatBtn.style.display = "block";
+                    return;
+                }
+            } else {
+                startT = null; frames = []; progress.style.width = "0%";
+                statusDisp.innerText = "Place finger firmly";
+            }
 
-    private fun startCamera(cameraProvider: ProcessCameraProvider) {
-
-        val preview = Preview.Builder().build()
-
-        val imageAnalysis = ImageAnalysis.Builder()
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .build()
-
-        imageAnalysis.setAnalyzer(
-            Executors.newSingleThreadExecutor(),
-            PulseAnalyzer { bpm ->
-                val stress = StressCalculator.calculate(bpm)
-                if (stress) {
-                    NotificationUtil.showStressNotification(this)
+            if (frames.length > 20) {
+                let p = 0;
+                for (let i = 1; i < frames.length - 1; i++) {
+                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) p++;
+                }
+                let b = Math.round(p / ((frames[frames.length-1].t - frames[0].t) / 60000) / 2);
+                if (b > 45 && b < 160) {
+                    lastBPM = b;
+                    lastStress = Math.min(Math.max(Math.round((b - 60) * 1.5), 5), 98) + "%";
+                    bpmDisp.innerText = lastBPM;
+                    stressDisp.innerText = lastStress;
                 }
             }
-        )
+            requestAnimationFrame(loop);
+        }
 
-        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-        cameraProvider.unbindAll()
-        val camera = cameraProvider.bindToLifecycle(
-            this,
-            cameraSelector,
-            preview,
-            imageAnalysis
-        )
-
-        camera.cameraControl.enableTorch(true)
-    }
-}
-
-================ PulseAnalyzer.kt =================
-
-class PulseAnalyzer(private val onPulseDetected: (Int) -> Unit) :
-    ImageAnalysis.Analyzer {
-
-    private var lastTimestamp = 0L
-    private var beats = 0
-
-    override fun analyze(image: ImageProxy) {
-        val buffer = image.planes[0].buffer
-        val data = ByteArray(buffer.remaining())
-        buffer.get(data)
-
-        val avg = data.map { it.toInt() and 0xFF }.average()
-
-        if (avg < 200) {
-            val now = System.currentTimeMillis()
-            if (lastTimestamp != 0L) {
-                beats++
-                val bpm = (beats * 60000 / (now - lastTimestamp)).toInt()
-                onPulseDetected(bpm)
+        document.getElementById('flash-btn').onclick = () => {
+            if (track) {
+                const s = track.getSettings();
+                track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => alert("Flash Error! Open in Chrome Directly."));
             }
-            lastTimestamp = now
-        }
-        image.close()
-    }
-}
-
-================ StressCalculator.kt =================
-
-object StressCalculator {
-
-    fun calculate(bpm: Int): Boolean {
-        return bpm > 100
-    }
-}
-
-================ NotificationUtil.kt =================
-
-object NotificationUtil {
-
-    fun showStressNotification(context: Context) {
-
-        val channelId = "stress_alert"
-        val manager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "Stress Alert",
-                NotificationManager.IMPORTANCE_HIGH
-            )
-            manager.createNotificationChannel(channel)
-        }
-
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("Stress Detected")
-            .setContentText("Please relax & take deep breaths")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
-
-        manager.notify(1, notification)
-    }
-}
+        };
+        init();
+    </script>
+</body>
+</html>
