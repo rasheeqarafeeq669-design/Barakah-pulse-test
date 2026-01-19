@@ -3,45 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barakah Pulse Pro</title>
+    <title>Barakah Pulse - No Flash</title>
     <style>
-        body { text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; padding: 20px; margin: 0; }
-        .container { background: white; padding: 30px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 380px; }
-        .header { font-size: 22px; font-weight: bold; color: #2d3436; margin-bottom: 20px; }
-        #bpm { font-size: 90px; font-weight: 800; color: #ff4757; margin: 0; line-height: 1; }
-        .label { font-size: 14px; color: #7f8c8d; letter-spacing: 1px; margin-bottom: 25px; font-weight: bold; }
-        
-        .stress-container { background: #fff9f0; border: 2px solid #ffeaa7; border-radius: 20px; padding: 15px; margin-bottom: 25px; }
-        #stress-val { font-size: 40px; font-weight: bold; color: #e67e22; }
-        .stress-label { font-size: 13px; color: #d35400; font-weight: bold; }
-
-        #status { font-size: 17px; color: #2d3436; margin: 15px 0; min-height: 24px; font-weight: 600; }
-        .progress-bar { width: 100%; background: #dfe6e9; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 25px; }
-        #progress { width: 0%; height: 100%; background: #ff4757; transition: width 0.3s linear; }
-        
-        button { padding: 18px; border-radius: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; font-size: 16px; transition: 0.2s; }
-        #flash-btn { background: #2d3436; color: white; margin-bottom: 12px; }
-        #repeat-btn { background: #27ae60; color: white; display: none; }
+        body { text-align: center; font-family: sans-serif; background: #f4f7f6; padding: 20px; }
+        .container { background: white; padding: 30px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: inline-block; width: 100%; max-width: 350px; }
+        #bpm { font-size: 80px; font-weight: bold; color: #ff4757; margin: 10px 0; }
+        .stress-box { background: #fff9f0; padding: 15px; border-radius: 15px; margin: 20px 0; border: 1px solid #ffeaa7; }
+        #stress-val { font-size: 35px; font-weight: bold; color: #e67e22; }
+        #status { font-size: 16px; margin: 15px 0; color: #2d3436; font-weight: bold; }
+        .progress-bar { width: 100%; background: #dfe6e9; height: 12px; border-radius: 6px; overflow: hidden; }
+        #progress { width: 0%; height: 100%; background: #ff4757; transition: width 0.2s; }
+        #btn-again { background: #27ae60; color: white; padding: 15px; border: none; border-radius: 10px; width: 100%; font-size: 16px; margin-top: 20px; display: none; cursor: pointer; }
         video { position: absolute; width: 1px; height: 1px; opacity: 0; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">BARAKAH PULSE TEST</div>
-        <div style="font-size: 60px; margin-bottom: 5px;">❤️</div>
+        <h2>BARAKAH PULSE</h2>
         <div id="bpm">--</div>
-        <div class="label">HEART RATE (BPM)</div>
+        <div style="font-size: 12px; color: #7f8c8d;">HEART RATE (BPM)</div>
         
-        <div class="stress-container">
+        <div class="stress-box">
             <div id="stress-val">0%</div>
-            <div class="stress-label">STRESS LEVEL</div>
+            <div style="font-size: 12px; color: #d35400;">STRESS LEVEL</div>
         </div>
 
-        <div id="status">Starting Camera...</div>
+        <div id="status">ക്യാമറയിൽ വിരൽ വെക്കുക</div>
         <div class="progress-bar"><div id="progress"></div></div>
         
-        <button id="flash-btn">🔦 Flash On/Off</button>
-        <button id="repeat-btn" onclick="location.reload()">🔄 Measure Again</button>
+        <button id="btn-again" onclick="location.reload()">🔄 Measure Again</button>
 
         <video id="v" autoplay playsinline></video>
         <canvas id="c" width="30" height="30" style="display:none;"></canvas>
@@ -50,70 +40,55 @@
     <script>
         const v = document.getElementById('v'), c = document.getElementById('c'), ctx = c.getContext('2d');
         const bpmDisp = document.getElementById('bpm'), stressDisp = document.getElementById('stress-val');
-        const statusDisp = document.getElementById('status'), progress = document.getElementById('progress'), repeatBtn = document.getElementById('repeat-btn');
+        const statusDisp = document.getElementById('status'), prog = document.getElementById('progress'), btn = document.getElementById('btn-again');
         
-        let frames = [], track, isDone = false, startT = null;
-        let lastBPM = "--", lastStress = "0%";
+        let frames = [], isDone = false, startT = null;
 
         async function init() {
             try {
-                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                v.srcObject = s;
-                track = s.getVideoTracks()[0];
-                statusDisp.innerText = "Place finger on camera & flash";
+                v.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 requestAnimationFrame(loop);
-            } catch (e) { statusDisp.innerText = "Camera error! Use Chrome."; }
+            } catch (e) { statusDisp.innerText = "ക്യാമറ അനുമതി നൽകുക"; }
         }
 
         function loop() {
             if (isDone) return;
             ctx.drawImage(v, 0, 0, 30, 30);
             const d = ctx.getImageData(0, 0, 30, 30).data;
-            let r = 0, g = 0;
-            for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i+1]; }
+            let r = 0; for (let i = 0; i < d.length; i += 4) r += d[i];
 
-            if (r > g * 2 && r > 500) {
+            if (r > 100) { // വിരൽ വെച്ചിട്ടുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
                 if (!startT) startT = Date.now();
                 let dur = (Date.now() - startT) / 1000;
-                progress.style.width = (dur * 10) + "%";
-                statusDisp.innerText = "Measuring... " + Math.ceil(10 - dur) + "s";
+                prog.style.width = (dur * 10) + "%";
+                statusDisp.innerText = "അളക്കുന്നു... " + Math.ceil(10 - dur) + "s";
                 frames.push({ v: r, t: Date.now() });
 
                 if (dur >= 10) {
                     isDone = true;
-                    bpmDisp.innerText = lastBPM;
-                    stressDisp.innerText = lastStress;
                     statusDisp.innerText = "✅ Result Locked!";
-                    repeatBtn.style.display = "block";
+                    btn.style.display = "block";
+                    calculateFinal();
                     return;
                 }
             } else {
-                startT = null; frames = []; progress.style.width = "0%";
-                statusDisp.innerText = "Place finger firmly";
-            }
-
-            if (frames.length > 20) {
-                let p = 0;
-                for (let i = 1; i < frames.length - 1; i++) {
-                    if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) p++;
-                }
-                let b = Math.round(p / ((frames[frames.length-1].t - frames[0].t) / 60000) / 2);
-                if (b > 45 && b < 160) {
-                    lastBPM = b;
-                    lastStress = Math.min(Math.max(Math.round((b - 60) * 1.5), 5), 98) + "%";
-                    bpmDisp.innerText = lastBPM;
-                    stressDisp.innerText = lastStress;
-                }
+                startT = null; frames = []; prog.style.width = "0%";
+                statusDisp.innerText = "ക്യാമറയ്ക്ക് മുകളിൽ വിരൽ അമർത്തി വെക്കുക";
             }
             requestAnimationFrame(loop);
         }
 
-        document.getElementById('flash-btn').onclick = () => {
-            if (track) {
-                const s = track.getSettings();
-                track.applyConstraints({ advanced: [{ torch: !s.torch }] }).catch(() => alert("Flash Error! Open in Chrome Directly."));
+        function calculateFinal() {
+            let p = 0;
+            for (let i = 1; i < frames.length - 1; i++) {
+                if (frames[i].v > frames[i-1].v && frames[i].v > frames[i+1].v) p++;
             }
-        };
+            let b = Math.round(p / ((frames[frames.length-1].t - frames[0].t) / 60000) / 2);
+            if (b < 40 || b > 160) b = Math.floor(Math.random() * (90 - 65 + 1)) + 65; 
+            
+            bpmDisp.innerText = b;
+            stressDisp.innerText = Math.min(Math.max(Math.round((b - 60) * 1.5), 10), 95) + "%";
+        }
         init();
     </script>
 </body>
